@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>California Road Trip 2026</title>
+
+<!-- PWA: manifest -->
+<link rel="manifest" href="./manifest.json">
+
+<!-- PWA: iOS meta tags -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="California 26">
+<link rel="apple-touch-icon" href="./icon-192.png">
+
+<!-- Color barra del navegador en Android -->
+<meta name="theme-color" content="#1a1a18">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+:root {
+  --sf:#185fa5; --al:#534ab7; --la:#ba7517; --yo:#3b6d11; --fly:#5f5e5a;
+  --bg:#f8f7f4; --card:#fff; --border:#e8e6df; --text:#1a1a18; --muted:#6b6a63;
+  --radius:12px; --topbar-h:108px;
+}
+* { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+body { font-family: -apple-system, system-ui, sans-serif; background:var(--bg); color:var(--text); font-size:15px; }
+
+/* ── TOPBAR ── */
+#topbar {
+  background:#fff; border-bottom:1px solid var(--border);
+  position:sticky; top:0; z-index:200;
+  padding: env(safe-area-inset-top, 12px) 16px 0;
+}
+#topbar h1 { font-size:15px; font-weight:700; padding:10px 0 0; color:var(--text); }
+#daynav {
+  display:flex; gap:6px; padding:10px 0 10px;
+  overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch;
+}
+#daynav::-webkit-scrollbar { display:none; }
+.dnbtn {
+  flex-shrink:0; padding:7px 13px; border-radius:20px;
+  border:1.5px solid var(--border); background:#fff;
+  font-size:13px; font-weight:500; cursor:pointer; color:var(--muted);
+  white-space:nowrap; min-height:36px;
+}
+.dnbtn.active { color:#fff; border-color:transparent; }
+.dnbtn[data-base="sf"].active  { background:var(--sf); }
+.dnbtn[data-base="al"].active  { background:var(--al); }
+.dnbtn[data-base="la"].active  { background:var(--la); }
+.dnbtn[data-base="yo"].active  { background:var(--yo); }
+.dnbtn[data-base="fly"].active { background:var(--fly); }
+
+/* ── PDF BAR ── */
+#pdfbar {
+  display:flex; gap:8px; align-items:center;
+  padding:8px 16px; background:#fff;
+  border-bottom:1px solid var(--border); flex-wrap:wrap;
+}
+#pdfbar span { font-size:12px; color:var(--muted); }
+.pdf-btn {
+  padding:6px 14px; border-radius:8px; border:1.5px solid var(--border);
+  background:#fff; font-size:13px; cursor:pointer; font-weight:500;
+  color:var(--text); min-height:36px;
+}
+.pdf-btn.primary { background:#1a1a18; color:#fff; border-color:#1a1a18; }
+
+/* ── MAIN SCROLL AREA ── */
+#content { padding:16px 16px 100px; overflow-y:auto; }
+
+/* ── MAP TOGGLE ── */
+#map-toggle-bar {
+  position:fixed; bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  left:50%; transform:translateX(-50%);
+  z-index:300;
+}
+#map-toggle-btn {
+  display:flex; align-items:center; gap:6px;
+  background:#1a1a18; color:#fff;
+  border:none; border-radius:24px;
+  padding:10px 20px; font-size:14px; font-weight:600;
+  cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,.3);
+  white-space:nowrap; min-height:44px;
+}
+
+/* ── MAP SHEET ── */
+#map-sheet {
+  position:fixed; inset:0; z-index:400;
+  display:flex; flex-direction:column;
+  transform:translateY(100%);
+  transition:transform .3s cubic-bezier(.4,0,.2,1);
+}
+#map-sheet.open { transform:translateY(0); }
+#map-header {
+  background:#fff; padding:12px 16px;
+  padding-top: calc(12px + env(safe-area-inset-top, 0px));
+  display:flex; justify-content:space-between; align-items:center;
+  border-bottom:1px solid var(--border); flex-shrink:0;
+}
+#map-header h3 { font-size:15px; font-weight:600; }
+#map-close {
+  width:32px; height:32px; border-radius:50%;
+  background:var(--bg); border:none; cursor:pointer;
+  font-size:18px; display:flex; align-items:center; justify-content:center;
+}
+#map { flex:1; width:100%; }
+
+/* ── DAY PANEL ── */
+.day-panel { display:none; }
+.day-panel.active { display:block; }
+
+.day-header {
+  display:flex; align-items:flex-start; gap:10px;
+  margin-bottom:16px; padding-bottom:14px; border-bottom:1px solid var(--border);
+}
+.day-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0; margin-top:4px; }
+.day-header h2 { font-size:18px; font-weight:700; line-height:1.3; }
+.day-header .date { font-size:13px; color:var(--muted); margin-top:2px; }
+.base-badge {
+  font-size:11px; font-weight:600; padding:4px 10px;
+  border-radius:10px; color:#fff; white-space:nowrap;
+  margin-left:auto; flex-shrink:0;
+}
+
+/* ── TIMELINE ── */
+.tl { position:relative; padding-left:26px; margin-bottom:20px; }
+.tl::before { content:''; position:absolute; left:7px; top:8px; bottom:0; width:1.5px; background:var(--border); }
+.tl-item { position:relative; margin-bottom:16px; }
+.tl-dot { position:absolute; left:-21px; top:5px; width:10px; height:10px; border-radius:50%; background:var(--border); border:2px solid var(--bg); }
+.tl-time { font-size:12px; color:var(--muted); margin-bottom:2px; }
+.tl-title { font-size:14px; font-weight:600; margin-bottom:4px; }
+.tl-body { font-size:14px; color:var(--muted); line-height:1.65; }
+.tl-drive {
+  display:inline-flex; align-items:center; gap:4px;
+  font-size:12px; color:var(--muted); background:var(--bg);
+  padding:3px 8px; border-radius:6px; margin-top:5px;
+}
+
+/* ── FOOD ── */
+.food-section { display:flex; flex-direction:column; gap:10px; margin-bottom:18px; }
+.food-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:14px; }
+.food-card h4 { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; margin-bottom:10px; }
+.restaurant { margin-bottom:10px; }
+.restaurant:last-child { margin-bottom:0; }
+.rest-name { font-size:14px; font-weight:600; }
+.rest-desc { font-size:13px; color:var(--muted); line-height:1.5; margin-top:1px; }
+.rest-link {
+  display:inline-block; font-size:12px; color:var(--sf);
+  text-decoration:none; margin-top:4px;
+  padding:3px 0; min-height:28px; /* touch target */
+}
+
+/* ── NOTES ── */
+.note-box {
+  background:#fafafa; border:1px solid var(--border);
+  border-left:3px solid; border-radius:var(--radius);
+  padding:12px 14px; margin-bottom:12px;
+  font-size:13px; color:var(--muted); line-height:1.65;
+}
+.note-box.warn { border-left-color:#ba7517; }
+.note-box.info { border-left-color:var(--sf); }
+.note-box.tip  { border-left-color:var(--al); }
+
+/* ── RESERVAS ── */
+.reservas-wrap { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:16px; }
+.conf-badge {
+  display:inline-flex; align-items:center; gap:4px;
+  font-size:12px; font-weight:500; padding:4px 9px;
+  border-radius:6px; background:#eaf3de; color:#3b6d11;
+}
+.pend-badge { background:#faeeda; color:#854f0b; }
+
+.section-title {
+  font-size:11px; font-weight:700; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.6px; margin:16px 0 8px;
+}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <h1>🌴 California Road Trip — Agosto 2026</h1>
+  <div id="daynav"></div>
+</div>
+
+<div id="pdfbar">
+  <span>Exportar:</span>
+  <button class="pdf-btn primary" onclick="exportPDF('all')">📄 PDF completo</button>
+  <button class="pdf-btn" id="pdf-day-btn" onclick="exportPDF('day')">📄 Este día</button>
+</div>
+
+<div id="content"></div>
+
+<div id="map-toggle-bar">
+  <button id="map-toggle-btn" onclick="toggleMap()">🗺 Ver mapa del día</button>
+</div>
+
+<!-- Map sheet -->
+<div id="map-sheet">
+  <div id="map-header">
+    <h3 id="map-title">Mapa del día</h3>
+    <button id="map-close" onclick="toggleMap()">✕</button>
+  </div>
+  <div id="map"></div>
+</div>
+
+<script>
+const BASE_COLORS = { sf:'#185fa5', al:'#534ab7', la:'#ba7517', yo:'#3b6d11', fly:'#5f5e5a' };
+
+const DAYS = [
+{
+  id:'d1', label:'Día 1', sublabel:'13 ago · Mié', base:'sf', baseLabel:'San Francisco', night:'Hotel Beresford Arms',
+  title:'Llegada a San Francisco',
+  reservas:[
+    {text:'✓ Vuelo LO35 (WAW→SFO)', ok:true},
+    {text:'✓ Hotel Beresford Arms', ok:true},
+  ],
+  timeline:[
+    {time:'13:50h', title:'Llegada SFO — Terminal 3', body:'Recogida de equipaje. AirTrain hasta BART o Uber al hotel (~35–45 min, ~$50–60). Sin coche estos dos primeros días — moverse en Uber y MUNI.', drive:null},
+    {time:'~15:30h', title:'Check-in Beresford Arms', body:'701 Post St, SF. Ducha y primera toma de contacto con la ciudad. Intentad no dormir — aguantad hasta las 21–22h para combatir el jet lag.', drive:null},
+    {time:'~17:00h', title:'Fisherman\'s Wharf', body:'Paseo por el Pier 39, leones marinos, ambiente de puerto. Imprescindible el primer día. Clam chowder en pan de sourdough en Boudin Bakery.', drive:null},
+    {time:'~20:00h', title:'Cena y a dormir', body:'Cena temprana y a la cama. Mañana hay mucho por ver.', drive:null},
+  ],
+  lunch:[
+    {name:'Boudin Bakery', desc:'Clam chowder en pan sourdough. Icónico primer día.', url:'https://boudinbakery.com'},
+    {name:'In-N-Out Burger', desc:'Jefferson St. Los chicos lo pedirán sí o sí.', url:'https://www.in-n-out.com'},
+  ],
+  dinner:[
+    {name:'Cioppino\'s', desc:'Marisco local, buen ambiente, zona Fisherman\'s.', url:'https://www.opentable.com/cioppinos'},
+    {name:'Gary Danko', desc:'Alta cocina SF. Reserva con mucha antelación.', url:'https://www.opentable.com/gary-danko'},
+    {name:'Fog Harbor Fish House', desc:'Terraza con vistas al Pier. Fresco y familiar.', url:'https://www.opentable.com/fog-harbor-fish-house'},
+  ],
+  notes:[
+    {type:'info', text:'Lleváis ~20h de viaje desde Madrid. Prioridad: adaptarse al horario local. Nada de oscurecer la habitación a las 16h — luz natural y caminar.'},
+  ],
+  pois:[
+    {name:'SFO Terminal 3', lat:37.6213, lng:-122.3790, color:'#888'},
+    {name:'Beresford Arms', lat:37.7881, lng:-122.4148, color:'#185fa5'},
+    {name:'Fisherman\'s Wharf / Pier 39', lat:37.8087, lng:-122.4098, color:'#185fa5'},
+    {name:'Boudin Bakery', lat:37.8081, lng:-122.4178, color:'#ba7517'},
+  ]
+},
+{
+  id:'d2', label:'Día 2', sublabel:'14 ago · Jue', base:'sf', baseLabel:'San Francisco', night:'Hotel Beresford Arms',
+  title:'Golden Gate · Sausalito · Béisbol',
+  reservas:[
+    {text:'✓ Hotel Beresford Arms', ok:true},
+    {text:'✓ Partido Giants vs Rockies — StubHub #602459386 (5 tickets, Premium Lower Box 123, Fila 30)', ok:true},
+    {text:'⚑ Aceptar transfer entradas en ikcalvo@gmail.com', ok:false},
+  ],
+  timeline:[
+    {time:'09:00h', title:'Desayuno en Union Square', body:'Peet\'s Coffee o Blue Bottle Coffee en el barrio. Salida temprana para aprovechar la mañana antes de las nieblas del mediodía.', drive:null},
+    {time:'10:00h', title:'Golden Gate — Battery Spencer', body:'Bus 28/29 o Uber hasta el mirador de Battery Spencer (lado Sausalito). Las mejores fotos del puente con SF de fondo. Opción: alquilar bicis en Pier 3 (~$40/bici, 3h) y cruzar el puente pedaleando.', drive:'Hotel → Battery Spencer ~35 min en Uber'},
+    {time:'12:00h', title:'Ferry a Sausalito', body:'Bajad hasta el embarcadero de Sausalito y tomad el ferry de vuelta a SF (~30 min, ~$15/persona). Llegáis directamente al Ferry Building.', drive:null},
+    {time:'13:00h', title:'Comida en Sausalito', body:'Comed en Sausalito antes de coger el ferry — ver opciones abajo.', drive:null},
+    {time:'15:30h', title:'Vuelta al hotel — descanso', body:'Descanso obligatorio antes del partido. Llegad al Oracle Park sobre las 18:45h.', drive:'Ferry Sausalito → SF Ferry Building ~30 min'},
+    {time:'18:45h', title:'Oracle Park — Giants vs Rockies', body:'Entradas: Premium Lower Box 123, Fila 30. Excelentes vistas a la bahía. Garlic fries, hot dogs y nachos — comer en el estadio es parte de la experiencia. El partido empieza a las 19:15h.', drive:'Hotel → Oracle Park ~20 min en Uber (~$15)'},
+  ],
+  lunch:[
+    {name:'Fish. Restaurant', desc:'Sausalito. Mariscos frescos con vistas al agua.', url:'https://www.yelp.com/biz/fish-sausalito'},
+    {name:'Scoma\'s of Sausalito', desc:'Clásico de mariscos en el puerto.', url:'https://www.opentable.com/scomas-of-sausalito'},
+  ],
+  dinner:[
+    {name:'Oracle Park (estadio)', desc:'Garlic fries + hot dogs dentro del estadio. Es la cena del día.', url:'https://www.mlb.com/giants/ballpark/food'},
+    {name:'MoMo\'s (pre-partido)', desc:'Junto al estadio. Ideal para cenar antes si llegáis pronto.', url:'https://www.opentable.com/momos-san-francisco'},
+  ],
+  notes:[
+    {type:'warn', text:'⚑ Aceptar el transfer de StubHub en ikcalvo@gmail.com antes del viaje y descargar las entradas en el móvil. Sin papel — el móvil es el ticket.'},
+    {type:'tip', text:'Si queréis hacer Alcatraz, este es el mejor día: la visita sale desde el Pier 33 y podéis encajarla entre el Golden Gate y el partido. Reservad en alcatrazcruises.com (~$47 adulto).'},
+  ],
+  pois:[
+    {name:'Beresford Arms', lat:37.7881, lng:-122.4148, color:'#185fa5'},
+    {name:'Battery Spencer (mirador Golden Gate)', lat:37.8325, lng:-122.4795, color:'#185fa5'},
+    {name:'Sausalito', lat:37.8591, lng:-122.4853, color:'#185fa5'},
+    {name:'Ferry Building SF', lat:37.7956, lng:-122.3935, color:'#888'},
+    {name:'Oracle Park', lat:37.7786, lng:-122.3893, color:'#ba7517'},
+  ]
+},
+{
+  id:'d3', label:'Día 3', sublabel:'15 ago · Vie', base:'al', baseLabel:'Casa Alamo, CA', night:'Casa Alamo, CA',
+  title:'Check-out SF · Barrios · Recogida coche · Casa Alamo',
+  reservas:[
+    {text:'✓ Alamo SUV recogida SFO 17:30h — #1592386483', ok:true},
+    {text:'⚑ Check-out Beresford Arms (confirmar hora, normalmente 11:00h)', ok:false},
+  ],
+  timeline:[
+    {time:'09:00h', title:'Check-out Beresford Arms', body:'Dejad el equipaje en consigna en el hotel si es necesario. Salid a explorar SF con calma.', drive:null},
+    {time:'09:30h', title:'Tranvía histórico (Cable Car)', body:'Línea Powell-Hyde desde Union Square hasta Fisherman\'s Wharf. La experiencia más icónica de SF. Ida y vuelta (~$8/persona).', drive:null},
+    {time:'10:30h', title:'Barrio Chino (Chinatown)', body:'El más antiguo de EEUU. Grant Avenue, tiendas curiosas, panadería Good Mong Kok (dim sum baratísimo y buenísimo). 45 min es suficiente.', drive:null},
+    {time:'11:30h', title:'Haight-Ashbury', body:'Tiendas vintage, murales, historia hippie. Los chicos fliparán con las tiendas raras.', drive:'Chinatown → Haight ~15 min Uber'},
+    {time:'12:30h', title:'Alamo Square — Painted Ladies', body:'Las casas victorianas más famosas de SF (las de Padres Forzosos). A 5 min andando desde Haight. Foto obligatoria con el skyline detrás.', drive:null},
+    {time:'13:30h', title:'Comida en el barrio', body:'Ver opciones abajo.', drive:null},
+    {time:'16:30h', title:'Uber a SFO', body:'Salida hacia SFO para recoger el coche. Llegad 15 min antes de la hora de recogida.', drive:'Zona → SFO ~40 min en Uber'},
+    {time:'17:30h', title:'Recogida coche Alamo en SFO', body:'AirTrain hasta piso 4 del Rental Car Center → mostrador Alamo. Audi Q3 o Cadillac XT4. CDW + responsabilidad incluidos. Kilometraje ilimitado.', drive:null},
+    {time:'18:30h', title:'Traslado a Casa Alamo', body:'Primera vez con el coche. Ruta por la I-680 norte. Bienvenidos a casa.', drive:'SFO → Casa Alamo ~25–30 min'},
+  ],
+  lunch:[
+    {name:'Zazie', desc:'Cole Valley (cerca Haight). Brunch americano top.', url:'https://www.opentable.com/zazie'},
+    {name:'Cha Cha Cha', desc:'Haight St. Cocina caribeña, tapas, ambiente joven.', url:'https://www.yelp.com/biz/cha-cha-cha-san-francisco'},
+    {name:'Good Mong Kok Bakery', desc:'Chinatown. Dim sum callejero, barato y delicioso.', url:'https://www.yelp.com/biz/good-mong-kok-bakery-san-francisco'},
+  ],
+  dinner:[
+    {name:'Cena en casa', desc:'Primera noche en Alamo — comprar en el supermercado local.', url:null},
+    {name:'Pete\'s Brass Rail (Danville)', desc:'Cerca de Alamo. Restaurante americano clásico de la zona.', url:'https://www.yelp.com/biz/petes-brass-rail-and-car-wash-danville'},
+  ],
+  notes:[
+    {type:'info', text:'Llenad el depósito del coche antes de salir de la zona del aeropuerto — es el momento más barato para repostar durante todo el viaje.'},
+  ],
+  pois:[
+    {name:'Beresford Arms (check-out)', lat:37.7881, lng:-122.4148, color:'#888'},
+    {name:'Cable Car — Union Square', lat:37.7879, lng:-122.4075, color:'#534ab7'},
+    {name:'Chinatown SF', lat:37.7941, lng:-122.4078, color:'#534ab7'},
+    {name:'Haight-Ashbury', lat:37.7693, lng:-122.4459, color:'#534ab7'},
+    {name:'Alamo Square (Painted Ladies)', lat:37.7762, lng:-122.4341, color:'#534ab7'},
+    {name:'SFO — Alamo Rent a Car', lat:37.6213, lng:-122.3790, color:'#ba7517'},
+    {name:'Casa Alamo, CA', lat:37.8477, lng:-122.0294, color:'#534ab7'},
+  ]
+},
+{
+  id:'d4', label:'Día 4', sublabel:'16 ago · Sáb', base:'al', baseLabel:'Casa Alamo, CA', night:'Casa Alamo, CA',
+  title:'Six Flags Discovery Kingdom',
+  reservas:[
+    {text:'✓ Six Flags — 5 entradas generales + 3 Flash Pass — #285763768', ok:true},
+  ],
+  timeline:[
+    {time:'08:45h', title:'Salida desde casa', body:'Salid de Alamo a las 08:45h para llegar al abrir. Desayunad en casa antes de salir.', drive:'Casa Alamo → Six Flags ~45 min'},
+    {time:'10:00h', title:'Apertura Six Flags Discovery Kingdom', body:'Entrad en cuanto abra. Las colas son menores la primera hora. Flash Pass: prioridad en Superman Ultimate Flight, Joker y Medusa.', drive:null},
+    {time:'10:00–13:00h', title:'Bloque de mañana — atracciones principales', body:'Superman Ultimate Flight · Joker · Medusa · Batman: The Ride. Usad el Flash Pass estratégicamente en las que más cola tengan.', drive:null},
+    {time:'13:00h', title:'Comida dentro del parque', body:'Comed antes de las 13:30h para evitar las colas máximas del mediodía.', drive:null},
+    {time:'14:00–18:30h', title:'Bloque de tarde — agua + espectáculos', body:'V2: Vertical Velocity · Roar · zona de atracciones de agua (llevar bañador y ropa de cambio) · espectáculos de animales.', drive:null},
+    {time:'19:00h', title:'Cierre del parque — vuelta a casa', body:'Salida a las 19h. Llegada a casa sobre las 20h.', drive:'Six Flags → Casa Alamo ~45 min'},
+  ],
+  lunch:[
+    {name:'Restaurantes dentro del parque', desc:'Saltimbocca (italiano), Fins (mariscos). Comed antes de las 13:30h.', url:'https://www.sixflags.com/discoverykingdom/plan-your-visit/dining'},
+    {name:'Desayuno en casa', desc:'Salid con el estómago lleno.', url:null},
+  ],
+  dinner:[
+    {name:'Cena en casa', desc:'Vuelta a casa a las 20h — cena relajada tras el día intenso.', url:null},
+    {name:'In-N-Out Burger Vallejo', desc:'Si la familia tiene hambre en el camino de vuelta.', url:'https://www.in-n-out.com/locations'},
+  ],
+  notes:[
+    {type:'tip', text:'Flash Pass: asignadlo a los que más rides quieran hacer (Pablo y Gonzalo). Llevad protector solar alto — agosto en Vallejo hace calor (30–35°C).'},
+    {type:'warn', text:'Restricciones de altura: Superman Ultimate Flight requiere mínimo 54" (137 cm). Verificad alturas antes de ir.'},
+  ],
+  pois:[
+    {name:'Casa Alamo, CA', lat:37.8477, lng:-122.0294, color:'#534ab7'},
+    {name:'Six Flags Discovery Kingdom', lat:38.1305, lng:-122.2111, color:'#3b6d11'},
+  ]
+},
+{
+  id:'d5', label:'Día 5', sublabel:'17 ago · Dom', base:'al', baseLabel:'Casa Alamo, CA', night:'Casa Alamo, CA',
+  title:'San Francisco — Tranvía · North Beach · Barrios',
+  reservas:[
+    {text:'⚑ Alcatraz (opcional) — reservar en alcatrazcruises.com', ok:false},
+  ],
+  timeline:[
+    {time:'09:00h', title:'Salida desde casa hacia SF', body:'Coged el coche hasta el BART de Walnut Creek o Dublin/Pleasanton (~20 min) y entrad en SF en metro — aparcar en SF es caro y complicado.', drive:'Casa → BART + metro a SF ~50 min total'},
+    {time:'10:00h', title:'North Beach + Coit Tower', body:'El barrio italiano de SF. Calles con carácter, café auténtico, vistas desde la Coit Tower. Columbus Ave llena de panaderías y librerías históricas. La librería City Lights es icónica.', drive:null},
+    {time:'11:30h', title:'Alcatraz (opcional)', body:'Si habéis reservado, la visita sale desde el Pier 33. Dura ~2,5h con el ferry. La historia del penal narrada en audio es muy buena para los chicos.', drive:null},
+    {time:'13:30h', title:'Comida en North Beach / Embarcadero', body:'Ver opciones abajo.', drive:null},
+    {time:'15:00h', title:'Ferry Building + Embarcadero', body:'El mercado del Ferry Building los domingos tiene puestos de productores locales, comida artesana, quesos, frutas. Muy buen ambiente.', drive:null},
+    {time:'16:30h', title:'Vuelta a Alamo', body:'BART de regreso y a casa. Mañana salís a las 07:00h.', drive:'SF → Casa Alamo ~50 min'},
+    {time:'21:00h', title:'Preparar para el día siguiente', body:'Cargad los móviles, descargad mapas offline de la ruta Alamo → LA. Preparad la mochila del coche.', drive:null},
+  ],
+  lunch:[
+    {name:'Tony\'s Pizza Napoletana', desc:'North Beach. Una de las mejores pizzas de SF. Reserva recomendada.', url:'https://www.opentable.com/tonys-pizza-napoletana'},
+    {name:'Sotto Mare', desc:'North Beach. Mariscos y cioppino. Muy local.', url:'https://www.yelp.com/biz/sotto-mare-oysteria-and-seafood-san-francisco'},
+  ],
+  dinner:[
+    {name:'Cena en casa', desc:'Última noche antes del tramo largo. Algo fácil en casa.', url:null},
+    {name:'Poke Bar Danville', desc:'Opción ligera cerca de Alamo si no queréis cocinar.', url:'https://www.yelp.com/search?find_desc=poke&find_loc=Danville%2C+CA'},
+  ],
+  notes:[
+    {type:'info', text:'Día diseñado conscientemente tranquilo. El 18 salís a las 07:00h con ~6h de conducción — entrar a SF en coche hoy no merece la pena. BART es más cómodo.'},
+    {type:'warn', text:'Preparad la noche anterior: depósito lleno, GPS configurado, mochila con agua y snacks. La ruta del 18 empieza muy temprano.'},
+  ],
+  pois:[
+    {name:'Casa Alamo, CA', lat:37.8477, lng:-122.0294, color:'#534ab7'},
+    {name:'North Beach / Coit Tower', lat:37.8024, lng:-122.4058, color:'#534ab7'},
+    {name:'Pier 33 — Alcatraz Ferry', lat:37.8074, lng:-122.4124, color:'#534ab7'},
+    {name:'Ferry Building SF', lat:37.7956, lng:-122.3935, color:'#534ab7'},
+  ]
+},
+{
+  id:'d6', label:'Día 6', sublabel:'18 ago · Lun', base:'la', baseLabel:'Los Ángeles / Burbank', night:'SpringHill Suites Burbank',
+  title:'Ruta costera: Alamo → Santa Cruz → Monterey → Carmel → LA',
+  reservas:[
+    {text:'✓ SpringHill Suites Burbank — check-in 18 ago', ok:true},
+  ],
+  timeline:[
+    {time:'07:00h', title:'Salida desde casa', body:'Salid con el depósito lleno. Bajad por la I-680 S hacia Santa Cruz por la CA-17. Descargad los mapas offline antes de salir.', drive:'Casa Alamo → Santa Cruz ~1h 15 min (CA-17)'},
+    {time:'08:15h', title:'Santa Cruz', body:'Santa Cruz Beach Boardwalk — parque de atracciones junto al mar, el más antiguo de California (1907). Bajad 45 min: la noria, el Giant Dipper y el ambiente de playa.', drive:null},
+    {time:'09:30h', title:'Monterey', body:'La ciudad costera más bonita del tramo. Monterey Bay Aquarium (uno de los mejores del mundo, merece 1,5–2h). Si vais ajustados, pasad por Cannery Row y el puerto sin entrar.', drive:'Santa Cruz → Monterey ~45 min'},
+    {time:'11:30h', title:'17-Mile Drive', body:'Carretera privada escénica ($12 por coche). Paradas: Lone Cypress, Bird Rock (leones marinos), Pebble Beach Golf Links. Imprescindible.', drive:'Monterey → entrada 17-Mile Drive ~10 min'},
+    {time:'12:30h', title:'Carmel-by-the-Sea', body:'Pueblo de cuento: calles sin nombres, casas de cuento de hadas, galerías de arte. La playa de Carmel es de arena blanca (agua fría). Comed aquí.', drive:'17-Mile Drive → Carmel ~15 min'},
+    {time:'14:00h', title:'Ruta a Los Ángeles', body:'Desde Carmel tomad la US-101 S dirección LA. La 101 es más rápida que la Hwy 1.', drive:'Carmel → Burbank ~4h 30 min por US-101 S'},
+    {time:'18:30h', title:'Llegada a SpringHill Suites Burbank', body:'549 S San Fernando Blvd, Burbank. Check-in, ducha y cena cerca del hotel.', drive:null},
+  ],
+  lunch:[
+    {name:'Caracalla Deli (Carmel)', desc:'Bocadillos artesanos, rápido y bueno para comer antes de la ruta larga.', url:'https://www.yelp.com/biz/caracalla-carmel-by-the-sea'},
+    {name:'The Forge in the Forest (Carmel)', desc:'Terraza con jardín. Más tranquilo, ideal para descansar.', url:'https://www.opentable.com/the-forge-in-the-forest'},
+  ],
+  dinner:[
+    {name:'Granville Restaurant (Burbank)', desc:'Americana moderna, buena relación calidad/precio cerca del hotel.', url:'https://www.opentable.com/granville-burbank'},
+    {name:'Porto\'s Bakery (Burbank)', desc:'Famosa panadería cubana de Burbank.', url:'https://www.portosbakery.com'},
+    {name:'In-N-Out Burger Burbank', desc:'Después de 6h de coche a veces lo sencillo es lo mejor.', url:'https://www.in-n-out.com/locations'},
+  ],
+  notes:[
+    {type:'warn', text:'Día más exigente en coche. Salir a las 07:00h es clave — si salís tarde perderéis la costa o la llegada con luz a Burbank.'},
+    {type:'tip', text:'Preparad agua, fruta y snacks la noche anterior. Entre Santa Cruz y Carmel hay pocas paradas convenientes.'},
+  ],
+  pois:[
+    {name:'Casa Alamo, CA (salida)', lat:37.8477, lng:-122.0294, color:'#888'},
+    {name:'Santa Cruz Boardwalk', lat:36.9641, lng:-122.0176, color:'#ba7517'},
+    {name:'Monterey Bay Aquarium', lat:36.6185, lng:-121.9018, color:'#ba7517'},
+    {name:'17-Mile Drive — Lone Cypress', lat:36.5726, lng:-121.9652, color:'#ba7517'},
+    {name:'Carmel-by-the-Sea', lat:36.5552, lng:-121.9233, color:'#ba7517'},
+    {name:'SpringHill Suites Burbank', lat:34.1791, lng:-118.3084, color:'#ba7517'},
+  ]
+},
+{
+  id:'d7', label:'Día 7', sublabel:'19 ago · Mar', base:'al', baseLabel:'Casa Alamo, CA', night:'Casa Alamo, CA',
+  title:'Los Ángeles · Check-out · Vuelta a Alamo',
+  reservas:[
+    {text:'✓ SpringHill Suites Burbank — check-out 19 ago', ok:true},
+  ],
+  timeline:[
+    {time:'09:00h', title:'Check-out SpringHill Suites', body:'Dejad el equipaje en el maletero y salid a explorar LA. La ruta va de este a oeste — sin retrocesos.', drive:null},
+    {time:'09:15h', title:'Griffith Observatory + Hollywood Sign', body:'Subid en coche al observatorio (~15 min desde Burbank). Parking gratuito antes de las 10h. Vistas de 360° sobre toda LA y el cartel de HOLLYWOOD. El mirador exterior es accesible siempre.', drive:'Burbank → Griffith ~15 min'},
+    {time:'10:00h', title:'Hollywood Blvd — Walk of Fame', body:'Bajad por Vermont Ave hasta Hollywood Blvd. Paseo de la Fama, huellas en el Grauman\'s Chinese Theatre. 45 min antes de que lleguen las multitudes.', drive:'Griffith → Hollywood Blvd ~10 min'},
+    {time:'11:00h', title:'Sunset Strip → Beverly Hills → Rodeo Drive', body:'Conducid por Sunset Blvd hasta Beverly Hills — la propia conducción es la experiencia. Parada rápida en Rodeo Drive (15 min a pie).', drive:'Hollywood → Beverly Hills ~20 min'},
+    {time:'12:00h', title:'Santa Mónica Pier + Venice Beach', body:'Noria sobre el Pacífico, paseo por el Pier. Luego 10 min hasta Venice Beach: el paseo marítimo, los skaters, los músicos callejeros. Los chicos van a querer quedarse.', drive:'Beverly Hills → Santa Mónica ~20 min'},
+    {time:'13:15h', title:'Comida en Venice / Santa Mónica', body:'Ver opciones abajo. Comed antes de las 14h para salir a tiempo.', drive:null},
+    {time:'14:00h', title:'Salida hacia Alamo — I-5 Norte', body:'Desde Santa Mónica tomad la I-10 E hasta la I-5 N. A las 14h el tráfico de LA es todavía manejable — evitáis el rush de las 16–17h.', drive:'Santa Mónica → Alamo ~5–5,5h por I-5 N'},
+    {time:'19:30h', title:'Llegada a Casa Alamo', body:'Cena ligera. Mañana salís a las 07:00h hacia Yosemite.', drive:null},
+  ],
+  lunch:[
+    {name:'Gjusta (Venice)', desc:'Panadería/deli de culto. Bocadillos excepcionales.', url:'https://www.gjusta.com'},
+    {name:'The Brig (Venice)', desc:'Terraza, hamburguesas, ambiente local joven.', url:'https://www.yelp.com/biz/the-brig-venice'},
+    {name:'Broad Street Oyster Co.', desc:'Santa Mónica. Lobster rolls y mariscos. Muy recomendado.', url:'https://www.broadstreetoyster.com'},
+  ],
+  dinner:[
+    {name:'Cena en casa', desc:'Llegáis ~19:30h a Alamo. Algo preparado en casa.', url:null},
+    {name:'Pizza Antica (Lafayette)', desc:'Cerca de Alamo. Pizza de leña, noche tranquila.', url:'https://www.opentable.com/pizza-antica-lafayette'},
+  ],
+  notes:[
+    {type:'tip', text:'Ruta de este a oeste: Burbank → Griffith → Hollywood → Beverly Hills → Santa Mónica. Sin retrocesos, acabáis en la costa justo antes de tomar la I-10 → I-5.'},
+    {type:'warn', text:'Parking: en Griffith llegad antes de las 10h. En Santa Mónica usad el parking del Pier (primeras 2h asequibles) o Santa Mónica Place con validación.'},
+  ],
+  pois:[
+    {name:'SpringHill Suites Burbank (check-out)', lat:34.1791, lng:-118.3084, color:'#888'},
+    {name:'Griffith Observatory', lat:34.1184, lng:-118.3004, color:'#ba7517'},
+    {name:'Hollywood Blvd — Walk of Fame', lat:34.1016, lng:-118.3267, color:'#ba7517'},
+    {name:'Rodeo Drive, Beverly Hills', lat:34.0696, lng:-118.3972, color:'#ba7517'},
+    {name:'Santa Mónica Pier', lat:34.0083, lng:-118.4987, color:'#ba7517'},
+    {name:'Venice Beach', lat:33.9850, lng:-118.4695, color:'#ba7517'},
+    {name:'Casa Alamo, CA (regreso)', lat:37.8477, lng:-122.0294, color:'#534ab7'},
+  ]
+},
+{
+  id:'d8', label:'Día 8', sublabel:'20 ago · Mié', base:'al', baseLabel:'Casa Alamo, CA', night:'Casa Alamo, CA',
+  title:'Yosemite Día 1 — Valley · Falls · Mist Trail',
+  reservas:[
+    {text:'⚑ Timed Entry Permit Día 20 — recreation.gov (verificar si requerido en 2026)', ok:false},
+  ],
+  timeline:[
+    {time:'07:00h', title:'Salida desde casa', body:'Desayunad antes de salir. Ruta por la I-580 E → CA-120 E (Big Oak Flat Road). Llenad el depósito en Manteca o Oakdale — dentro del parque no hay gasolineras.', drive:'Casa Alamo → Yosemite Valley ~3h (CA-120)'},
+    {time:'10:00h', title:'Entrada Big Oak Flat — Tunnel View', body:'Parad en el mirador de Tunnel View: El Capitán, Half Dome y Bridalveil Fall de un solo vistazo. Los chicos van a quedarse en silencio.', drive:null},
+    {time:'10:20h', title:'Bridalveil Fall', body:'A 5 min en coche desde Tunnel View. Parking propio. Paseo de 10 min hasta la base de la cascada.', drive:null},
+    {time:'11:00h', title:'Aparcar en Yosemite Valley Parking', body:'Aparcar y no mover el coche hasta la vuelta. Shuttle gratuito (07:00–22:00h). Mapa de paradas en nps.gov/yose.', drive:null},
+    {time:'11:15h', title:'Yosemite Falls (shuttle)', body:'Parada 6 del shuttle. Las cataratas más altas de Norteamérica. Senderismo hasta la base (fácil, 20 min). Si hay energía: Upper Fall Trail (3h, nivel medio — para Pablo y Gonzalo).', drive:'Shuttle desde Valley parking'},
+    {time:'13:00h', title:'Comida en Curry Village / Half Dome Village', body:'Shuttle parada 14. Cafetería, bar de pizzas y tienda. Vistas al Half Dome.', drive:null},
+    {time:'14:30h', title:'Mist Trail', body:'Desde Curry Village a pie. Sube hasta Vernal Fall (1,5h ida/vuelta, fácil/medio). Os vais a mojar con la niebla — llevad chubasquero. Arcoíris casi garantizado con sol.', drive:null},
+    {time:'17:30h', title:'Vuelta al coche y salida del parque', body:'Shuttle de vuelta al parking. Salid antes de las 18:00h para evitar el tráfico de salida.', drive:'Yosemite → Casa Alamo ~3h (CA-120 W)'},
+    {time:'21:00h', title:'Llegada a casa', body:'Cena ligera. Mañana volvéis a Yosemite para las zonas que no habéis visto hoy.', drive:null},
+  ],
+  lunch:[
+    {name:'Half Dome Village Bar & Grill', desc:'Dentro del parque. Hamburguesas y pizza con vistas.', url:'https://www.travelyosemite.com/dining/half-dome-village-pizza-patio/'},
+    {name:'Yosemite Valley Lodge', desc:'Más tranquilo. Bar y restaurante en el lodge.', url:'https://www.travelyosemite.com/lodging/yosemite-valley-lodge/'},
+  ],
+  dinner:[
+    {name:'Cena en casa', desc:'Vuelta a las 21h — algo preparado en casa.', url:null},
+    {name:'Pica Pica (Walnut Creek)', desc:'Venezolana, arepas. Cerca de Alamo, abierto hasta tarde.', url:'https://www.picapicakitchen.com'},
+  ],
+  notes:[
+    {type:'warn', text:'⚑ Timed Entry Permit: en veranos recientes fue obligatorio entre las 06:00 y las 16:00h. Verificad en nps.gov/yose. Se reserva en recreation.gov y se agota en minutos.'},
+    {type:'tip', text:'Mist Trail: llevad chubasquero. Las rocas son resbaladizas — zapatillas con agarre. La subida tiene escalones de granito empinados.'},
+  ],
+  pois:[
+    {name:'Casa Alamo, CA (salida)', lat:37.8477, lng:-122.0294, color:'#888'},
+    {name:'Tunnel View', lat:37.7160, lng:-119.6780, color:'#3b6d11'},
+    {name:'Bridalveil Fall', lat:37.7160, lng:-119.6512, color:'#3b6d11'},
+    {name:'Yosemite Falls', lat:37.7462, lng:-119.5960, color:'#3b6d11'},
+    {name:'Half Dome Village / Curry Village', lat:37.7363, lng:-119.5595, color:'#3b6d11'},
+    {name:'Mist Trail — Vernal Fall', lat:37.7269, lng:-119.5442, color:'#3b6d11'},
+  ]
+},
+{
+  id:'d9', label:'Día 9', sublabel:'21 ago · Jue', base:'al', baseLabel:'Casa Alamo, CA', night:'Casa Alamo, CA',
+  title:'Yosemite Día 2 — Glacier Point · Mariposa Grove',
+  reservas:[
+    {text:'⚑ Timed Entry Permit Día 21 — recreation.gov', ok:false},
+  ],
+  timeline:[
+    {time:'07:00h', title:'Salida desde casa', body:'Mismo tramo que ayer. Podéis salir 30 min más tarde si los chicos están cansados.', drive:'Casa Alamo → Yosemite ~3h (CA-120)'},
+    {time:'10:00h', title:'Glacier Point', body:'Tomad la Glacier Point Road desde el Valley (~45 min en coche). Vistas espectaculares: Half Dome a la misma altura, el Valle 900m abajo, Nevada Fall y Vernal Fall visibles a la vez. Llegad temprano — a mediodía el parking se llena.', drive:'Entrada parque → Glacier Point ~45 min'},
+    {time:'12:00h', title:'Vuelta al Valley — Comida en Yosemite Village', body:'Degnan\'s Kitchen o cafetería del Village Store. Opción: llevar bocadillos y comer en una mesa de picnic con vistas al Half Dome.', drive:'Glacier Point → Yosemite Village ~45 min'},
+    {time:'13:30h', title:'Mariposa Grove — Secuoyas gigantes', body:'CA-41 S desde el Valley (~1h). Shuttle gratuito cada 10–15 min. Paseo de 1,5–2h entre las secuoyas más grandes del mundo. El Grizzly Giant tiene 2.700 años.', drive:'Village → Mariposa Grove ~1h por CA-41'},
+    {time:'16:00h', title:'Salida del parque y vuelta a Alamo', body:'Salid por la entrada sur (CA-41) → Fresno → CA-99 N → I-580 W hasta Alamo.', drive:'Mariposa Grove → Casa Alamo ~3h 30 min'},
+    {time:'19:30h', title:'Llegada a casa — última noche', body:'Cena en casa. Preparad las maletas esta noche — mañana salís a las 17:30h al aeropuerto.', drive:null},
+  ],
+  lunch:[
+    {name:'Picnic propio (recomendado)', desc:'Preparad bocadillos en casa. Comer en el Valley con vistas al Half Dome es imbatible.', url:null},
+    {name:'Degnan\'s Kitchen (Yosemite Village)', desc:'Pizzas, bocadillos. Funcional dentro del parque.', url:'https://www.travelyosemite.com/dining/degnans-kitchen/'},
+  ],
+  dinner:[
+    {name:'Cena en casa', desc:'Última noche en Alamo. Cena familiar, preparad las maletas.', url:null},
+    {name:'Pera Persian Cuisine (Walnut Creek)', desc:'Iraniana, muy buena y cerca de Alamo.', url:'https://www.yelp.com/biz/pera-persian-cuisine-walnut-creek'},
+  ],
+  notes:[
+    {type:'tip', text:'Llevad bocadillos preparados — comer en una mesa de picnic con vistas al Half Dome es una experiencia que ningún restaurante puede igualar.'},
+    {type:'warn', text:'Esta noche preparad todas las maletas. Mañana es día de aeropuerto y no hay margen para improvisar.'},
+  ],
+  pois:[
+    {name:'Casa Alamo, CA (salida)', lat:37.8477, lng:-122.0294, color:'#888'},
+    {name:'Glacier Point', lat:37.7298, lng:-119.5737, color:'#3b6d11'},
+    {name:'Yosemite Village', lat:37.7490, lng:-119.5880, color:'#3b6d11'},
+    {name:'Mariposa Grove — Grizzly Giant', lat:37.5089, lng:-119.6014, color:'#3b6d11'},
+  ]
+},
+{
+  id:'d10', label:'Día 10', sublabel:'22 ago · Vie', base:'fly', baseLabel:'Vuelo de vuelta', night:'LO38 SFO → WAW',
+  title:'Último día · Devolución coche · Vuelo a Madrid',
+  reservas:[
+    {text:'✓ Alamo devolución SFO 19:00h', ok:true},
+    {text:'✓ Vuelo LO38 SFO 22:15h → WAW', ok:true},
+    {text:'✓ Vuelo LO431 WAW 19:40h → MAD 23:35h (23 ago)', ok:true},
+  ],
+  timeline:[
+    {time:'Mañana libre', title:'Mañana tranquila en casa', body:'Último desayuno en Alamo. Últimas compras — Target, Trader Joe\'s o Whole Foods en Walnut Creek (10 min). Cerrad bien la casa.', drive:null},
+    {time:'15:00h', title:'Preparar salida', body:'Carga de maletas, repaso de la casa. 2 maletas facturadas por persona (incluido en billetes LOT).', drive:null},
+    {time:'17:00h', title:'Gasolinera antes del aeropuerto', body:'Llenad el depósito antes de entrar al recinto. Hay estaciones en la salida de la I-101 hacia SFO. Devolver el coche con depósito vacío costará mucho más.', drive:null},
+    {time:'17:30h', title:'Salida hacia SFO', body:'Desde casa son 25–30 min. Id con margen.', drive:'Casa Alamo → SFO ~25–30 min'},
+    {time:'18:00h', title:'Devolución coche Alamo', body:'Piso 2 del Rental Car Center (780 N McDonnell Rd). Señales "Alamo Returns". Dejar las llaves dentro del coche. AirTrain hasta Terminal 3.', drive:null},
+    {time:'18:30h', title:'Check-in Terminal 3 — LOT Polish Airlines', body:'Check-in cierra ~19:15h. 2 maletas por persona sin cargo. Pasaporte + ESTA obligatorios.', drive:null},
+    {time:'19:15–22:00h', title:'Tiempo libre en el aeropuerto', body:'Cena en el aeropuerto, tiendas duty-free, carga de dispositivos. SFO T3 tiene buenas opciones.', drive:null},
+    {time:'22:15h', title:'Vuelo LO38 SFO → Varsovia', body:'Embarque ~21:45h. Asientos: Iker 06A, Ainhoa 06B, Pablo 07C, María 07B, Gonzalo 07C. Duración: 11h 15 min.', drive:null},
+  ],
+  lunch:[
+    {name:'Desayuno/brunch en casa', desc:'Última mañana en Alamo — disfrutad en casa.', url:null},
+    {name:'Whole Foods Market (Walnut Creek)', desc:'Para compras de última hora y comer algo fresco.', url:'https://www.wholefoodsmarket.com/stores/walnutcreek'},
+  ],
+  dinner:[
+    {name:'Cena en SFO — Terminal 3', desc:'Cat Cora\'s Kitchen o Napa Farms Market en T3.', url:'https://www.flysfo.com/shop-dine/locations'},
+    {name:'In-N-Out SFO (zona llegadas)', desc:'La última hamburguesa californiana.', url:'https://www.in-n-out.com/locations'},
+  ],
+  notes:[
+    {type:'info', text:'Margen amplio: devolución a las 19h y vuelo a las 22:15h. No hay prisa — disfrutad el último rato.'},
+    {type:'tip', text:'Duty-free recomendado: bourbon americano, chocolates Ghirardelli, productos Trader Joe\'s.'},
+  ],
+  pois:[
+    {name:'Casa Alamo, CA (salida final)', lat:37.8477, lng:-122.0294, color:'#888'},
+    {name:'Whole Foods Walnut Creek', lat:37.9099, lng:-122.0652, color:'#5f5e5a'},
+    {name:'SFO — Alamo Devolución', lat:37.6213, lng:-122.3790, color:'#5f5e5a'},
+    {name:'SFO Terminal 3 — Vuelo LO38', lat:37.6186, lng:-122.3795, color:'#5f5e5a'},
+  ]
+},
+];
+
+// ── BUILD NAV ──
+const nav = document.getElementById('daynav');
+const content = document.getElementById('content');
+
+DAYS.forEach((d,i) => {
+  const btn = document.createElement('button');
+  btn.className = 'dnbtn' + (i===0?' active':'');
+  btn.dataset.base = d.base;
+  btn.dataset.idx = i;
+  btn.innerHTML = `<strong>${d.label}</strong> <span style="font-weight:400"> ${d.sublabel}</span>`;
+  btn.onclick = () => showDay(i);
+  nav.appendChild(btn);
+});
+
+// ── BUILD PANELS ──
+DAYS.forEach((d,i) => {
+  const panel = document.createElement('div');
+  panel.className = 'day-panel' + (i===0?' active':'');
+  panel.id = 'panel-'+i;
+  const col = BASE_COLORS[d.base] || '#888';
+
+  let html = `
+  <div class="day-header">
+    <div class="day-dot" style="background:${col}"></div>
+    <div style="flex:1;min-width:0">
+      <h2>${d.title}</h2>
+      <div class="date">${d.sublabel} · 🏠 ${d.night}</div>
+    </div>
+    <span class="base-badge" style="background:${col}">${d.baseLabel}</span>
+  </div>`;
+
+  if(d.reservas?.length){
+    html += `<div class="section-title">Reservas del día</div><div class="reservas-wrap">`;
+    d.reservas.forEach(r => html += `<span class="conf-badge ${r.ok?'':'pend-badge'}">${r.text}</span>`);
+    html += `</div>`;
+  }
+
+  d.notes?.forEach(n => html += `<div class="note-box ${n.type}">${n.text}</div>`);
+
+  html += `<div class="section-title">Programa del día</div><div class="tl">`;
+  d.timeline.forEach(t => {
+    html += `<div class="tl-item">
+      <div class="tl-dot" style="background:${col}"></div>
+      <div class="tl-time">${t.time}</div>
+      <div class="tl-title">${t.title}</div>
+      <div class="tl-body">${t.body}</div>
+      ${t.drive?`<div class="tl-drive">🚗 ${t.drive}</div>`:''}
+    </div>`;
+  });
+  html += `</div>`;
+
+  html += `<div class="section-title">Dónde comer</div><div class="food-section">`;
+  html += `<div class="food-card"><h4>🍽 Comida</h4>`;
+  d.lunch.forEach(r => html += `<div class="restaurant">
+    <div class="rest-name">${r.name}</div>
+    <div class="rest-desc">${r.desc}</div>
+    ${r.url?`<a class="rest-link" href="${r.url}" target="_blank">Reservar / Ver →</a>`:''}
+  </div>`);
+  html += `</div>`;
+  html += `<div class="food-card"><h4>🌙 Cena</h4>`;
+  d.dinner.forEach(r => html += `<div class="restaurant">
+    <div class="rest-name">${r.name}</div>
+    <div class="rest-desc">${r.desc}</div>
+    ${r.url?`<a class="rest-link" href="${r.url}" target="_blank">Reservar / Ver →</a>`:''}
+  </div>`);
+  html += `</div></div>`;
+
+  panel.innerHTML = html;
+  content.appendChild(panel);
+});
+
+// ── MAP ──
+let mapInit = false, markers = [];
+const mapSheet = document.getElementById('map-sheet');
+
+function initMap(){
+  if(mapInit) return;
+  mapInit = true;
+  window._map = L.map('map').setView([37.5,-119.5],6);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    attribution:'© OpenStreetMap', maxZoom:18
+  }).addTo(window._map);
+}
+
+function loadMapDay(idx){
+  initMap();
+  markers.forEach(m => window._map.removeLayer(m));
+  markers = [];
+  const d = DAYS[idx], bounds = [];
+  d.pois.forEach(p => {
+    const icon = L.divIcon({
+      className:'',
+      html:`<div style="background:${p.color};width:14px;height:14px;border-radius:50%;border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.35)"></div>`,
+      iconSize:[14,14], iconAnchor:[7,7]
+    });
+    const m = L.marker([p.lat,p.lng],{icon}).addTo(window._map);
+    m.bindPopup(`<strong>${p.name}</strong>`);
+    markers.push(m); bounds.push([p.lat,p.lng]);
+  });
+  if(bounds.length>1) window._map.fitBounds(bounds,{padding:[30,30]});
+  else if(bounds.length===1) window._map.setView(bounds[0],12);
+  setTimeout(()=>window._map.invalidateSize(),300);
+  document.getElementById('map-title').textContent = `Mapa — ${d.label}: ${d.sublabel}`;
+}
+
+function toggleMap(){
+  const open = mapSheet.classList.toggle('open');
+  document.getElementById('map-toggle-btn').textContent = open ? '✕ Cerrar mapa' : '🗺 Ver mapa del día';
+  if(open){
+    const idx = [...document.querySelectorAll('.dnbtn')].findIndex(b=>b.classList.contains('active'));
+    loadMapDay(idx);
+  }
+}
+
+function showDay(idx){
+  document.querySelectorAll('.dnbtn').forEach((b,i)=>b.classList.toggle('active',i===idx));
+  document.querySelectorAll('.day-panel').forEach((p,i)=>p.classList.toggle('active',i===idx));
+  document.getElementById('pdf-day-btn').textContent = `📄 Día ${idx+1}`;
+  content.scrollTo({top:0, behavior:'smooth'});
+  // Scroll nav button into view
+  document.querySelectorAll('.dnbtn')[idx].scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'});
+  if(mapSheet.classList.contains('open')) loadMapDay(idx);
+}
+
+// ── PDF ──
+function exportPDF(mode){
+  const activeIdx = [...document.querySelectorAll('.dnbtn')].findIndex(b=>b.classList.contains('active'));
+  let el;
+  if(mode==='all'){
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'font-family:system-ui,sans-serif;font-size:13px;color:#1a1a18;';
+    const t = document.createElement('h1');
+    t.textContent = '🌴 California Road Trip — Agosto 2026';
+    t.style.cssText = 'font-size:20px;margin-bottom:24px;';
+    wrap.appendChild(t);
+    document.querySelectorAll('.day-panel').forEach(p=>{
+      const c = p.cloneNode(true);
+      c.style.display='block'; c.style.marginBottom='40px'; c.style.pageBreakAfter='always';
+      wrap.appendChild(c);
+    });
+    el = wrap;
+  } else {
+    const d = DAYS[activeIdx];
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'font-family:system-ui,sans-serif;font-size:13px;color:#1a1a18;';
+    const t = document.createElement('h2');
+    t.textContent = `${d.label} — ${d.sublabel}: ${d.title}`;
+    t.style.marginBottom='16px';
+    wrap.appendChild(t);
+    const c = document.getElementById('panel-'+activeIdx).cloneNode(true);
+    c.style.display='block'; wrap.appendChild(c);
+    el = wrap;
+  }
+  html2pdf().set({
+    margin:12,
+    filename: mode==='all' ? 'California_Roadtrip_2026.pdf' : `California_Dia${activeIdx+1}.pdf`,
+    html2canvas:{scale:2},
+    jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
+  }).from(el).save();
+}
+
+showDay(0);
+
+// ── SERVICE WORKER ──
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .catch(err => console.warn('SW no registrado:', err));
+  });
+}
+</script>
+</body>
+</html>
